@@ -114,3 +114,61 @@ async def face_match(
             "reason": "Hệ thống không thể xử lý hoặc trích xuất đặc trưng sinh trắc học từ các hình ảnh cung cấp.",
             "error_details": str(e)
         }
+
+def check_liveness_texture(img) -> tuple[bool, float]:
+    """
+    Thuật toán phân tích kết cấu ảnh biến đổi Laplacian để phát hiện ảnh chụp lại từ màn hình hoặc ảnh in phẳng.
+    Ảnh thật thường có độ sắc nét tự nhiên và dải phân bổ tần số sâu hơn ảnh chụp lại qua màn hình (bị mờ hoặc lóa).
+    """
+    # Chuyển ảnh sang dạng xám
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Tính toán ma trận biến thiên Laplacian để đo độ sắc nét (variance of Laplacian)
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    
+    # Thiết lập ngưỡng thực tế cho môi trường camera thông thường (Threshold)
+    # Ảnh tái tạo lại thường có chỉ số variance thấp dưới ngưỡng do hiện tượng mất nét pixel
+    threshold = 100.0 
+    is_live = laplacian_var > threshold
+    
+    return bool(is_live), round(float(laplacian_var), 2)
+
+@router.post("/liveness", summary="Kiểm tra thực thể sống - Chống gian lận ảnh chụp lại màn hình/2D")
+async def verify_liveness(file: UploadFile = File(..., description="Ảnh chụp chân dung trực tiếp để quét thực thể sống")):
+    """
+    API phân tích kết cấu dữ liệu nhị phân của ảnh để phát hiện các hình thức tấn công giả mạo (Spoofing).
+    """
+    if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        raise HTTPException(status_code=400, detail="Định dạng file không hợp lệ. Chỉ chấp nhận JPG, JPEG, PNG.")
+
+    try:
+        # Đọc dữ liệu nhị phân không blocking
+        await file.seek(0)
+        file_bytes = await file.read()
+        img = cv2.imdecode(np.frombuffer(file_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+        if img is None:
+            raise ValueError("Không thể giải mã hình ảnh liveness tải lên.")
+
+        # Kích hoạt động cơ kiểm tra kết cấu thực thể sống
+        is_live, liveness_score = check_liveness_texture(img)
+
+        return {
+            "status": "success",
+            "liveness_verification": {
+                "is_live": is_live,
+                "liveness_score": liveness_score,
+                "verdict": "REAL_USER" if is_live else "SPOOFING_ATTACK_DETECTED"
+            },
+            "system_metadata": {
+                "method": "Laplacian Texture Frequency Analysis",
+                "status_code": "LIVENESS_PROCESSED_SUCCESS"
+            }
+        }
+
+    except Exception as e:
+        return {
+            "status": "failed",
+            "reason": "Hệ thống không thể phân tích cấu trúc thực thể sống của ảnh.",
+            "error_details": str(e)
+        }
