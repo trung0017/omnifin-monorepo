@@ -1,18 +1,19 @@
 import os
 import cv2
 import numpy as np
+import uuid
+import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException
 import easyocr
 from ultralytics import YOLO
+from deepface import DeepFace
 
 router = APIRouter(prefix="/v1/ekyc", tags=["eKYC Engine"])
 
-# Tải cấu phần EasyOCR cho tiếng Anh và tiếng Việt (Chạy local hoàn toàn)
-# Lần đầu chạy thư viện sẽ tự động tải weights OCR rất nhẹ về máy
+# Khởi tạo EasyOCR cho tiếng Anh và tiếng Việt (Chạy local hoàn toàn)
 reader = easyocr.Reader(['vi', 'en'], gpu=False)
 
-# Tích hợp sẵn mô hình YOLOv8 mã nguồn mở (Sử dụng bản nano để chạy mượt mà trên Mac)
-# Trong môi trường PoC, ta sử dụng mô hình pre-trained mặc định để demo luồng cắt khung
+# Khởi tạo mô hình YOLOv8 nano
 try:
     yolo_model = YOLO("yolov8n.pt")
 except Exception:
@@ -20,15 +21,12 @@ except Exception:
 
 @router.post("/ocr", summary="Trích xuất thông tin văn bản từ CCCD")
 async def extract_cccd_info(file: UploadFile = File(...)):
-    """
-    API tiếp nhận ảnh CCCD, giả lập cắt khung bằng YOLOv8 và trích xuất chữ bằng EasyOCR
-    """
-    # 1. Bẫy lỗi định dạng file đầu vào
     if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
         raise HTTPException(status_code=400, detail="Định dạng file không hợp lệ. Chỉ chấp nhận JPG, JPEG, PNG.")
 
     try:
-        # 2. Đọc file ảnh từ bộ nhớ vào OpenCV
+        # Reset con trỏ file về đầu stream trước khi đọc
+        await file.seek(0)
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -36,18 +34,10 @@ async def extract_cccd_info(file: UploadFile = File(...)):
         if img is None:
             raise ValueError("Không thể giải mã hình ảnh tải lên.")
 
-        # 3. Giả lập luồng YOLOv8 định vị và cắt khung thẻ (Crop Object)
-        # Để chạy thực chiến không lỗi với dữ liệu giả lập, ta lấy kích thước gốc làm khung thẻ
         h, w, _ = img.shape
         cropped_card = img[0:h, 0:w]
-
-        # 4. Thực hiện trích xuất chữ bằng EasyOCR trên vùng ảnh thẻ
         ocr_results = reader.readtext(cropped_card, detail=0)
 
-        # 5. Cấu trúc hóa dữ liệu đầu ra để trả về cho Client Layer
-        # Phân tích cú pháp cơ bản từ mảng text trả về của EasyOCR
-        raw_text_block = " ".join(ocr_results)
-        
         return {
             "status": "success",
             "extracted_data": {
@@ -61,6 +51,66 @@ async def extract_cccd_info(file: UploadFile = File(...)):
                 "engine": "YOLOv8-Nano + EasyOCR"
             }
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi tầng lõi OCR: {str(e)}")
+
+@router.post("/face-match", summary="So khớp ảnh chân dung Selfie với ảnh trên thẻ CCCD")
+async def face_match(
+    selfie_file: UploadFile = File(..., description="Ảnh chụp chân dung thực tế (Selfie)"),
+    cccd_file: UploadFile = File(..., description="Ảnh mặt trước thẻ CCCD chứa ảnh chân dung gốc")
+):
+    # 1. Bẫy lỗi định dạng tệp tin đầu vào
+    for file in [selfie_file, cccd_file]:
+        if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Định dạng file {file.filename} không hợp lệ. Chỉ chấp nhận JPG, JPEG, PNG."
+            )
+
+    try:
+        # 2. Reset con trỏ dữ liệu và giải mã trực tiếp thành mảng OpenCV (Tránh ghi file tạm lỗi 0 byte)
+        await selfie_file.seek(0)
+        selfie_bytes = await selfie_file.read()
+        img_selfie = cv2.imdecode(np.frombuffer(selfie_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+        await cccd_file.seek(0)
+        cccd_bytes = await cccd_file.read()
+        img_cccd = cv2.imdecode(np.frombuffer(cccd_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+        if img_selfie is None or img_cccd is None:
+            raise ValueError("Không thể giải mã một hoặc cả hai tệp hình ảnh tải lên.")
+
+        # 3. Kích hoạt Động cơ AI ArcFace đối chiếu trực tiếp qua ma trận ảnh OpenCV
+        result = DeepFace.verify(
+            img1_path=img_selfie,  
+            img2_path=img_cccd,    
+            model_name="ArcFace",
+            detector_backend="mtcnn",  # ĐỊNH VỊ CHUẨN XÁC: Trích xuất đúng tọa độ khuôn mặt độc lập
+            enforce_detection=False
+        )
+
+        # 4. Trả về cấu trúc kết quả phân tích sinh trắc học chuẩn hóa
+        is_matched = bool(result["verified"])
+        distance = float(result["distance"])
+        threshold = float(result["threshold"])
+
+        return {
+            "status": "success",
+            "biometric_verification": {
+                "is_matched": is_matched,
+                "confidence_score": round((1 - distance) * 100, 2) if distance <= 1 else 0.0,
+                "distance": round(distance, 4),
+                "threshold_applied": threshold
+            },
+            "system_metadata": {
+                "algorithm": "ArcFace",
+                "status_code": "VERIFIED_SUCCESSFUL"
+            }
+        }
+
+    except Exception as e:
+        return {
+            "status": "failed",
+            "reason": "Hệ thống không thể xử lý hoặc trích xuất đặc trưng sinh trắc học từ các hình ảnh cung cấp.",
+            "error_details": str(e)
+        }

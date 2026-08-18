@@ -76,6 +76,7 @@ PySocks==1.7.1
 python-bidi==0.6.11
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
+python-multipart==0.0.32
 PyYAML==6.0.3
 requests==2.34.2
 retina-face==0.0.18
@@ -91,6 +92,7 @@ starlette==1.6.0
 sympy==1.14.0
 tensorflow==2.21.0
 termcolor==3.3.0
+tf_keras==2.21.0
 tifffile==2026.8.16
 torch==2.13.0
 torchvision==0.28.0
