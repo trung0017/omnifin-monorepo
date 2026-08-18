@@ -1,7 +1,9 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.core.database import get_db
+from app.api import ekyc  # Import module ekyc mới tạo
 
 app = FastAPI(
     title="OmniFin Enterprise - Identity & eKYC Service",
@@ -9,13 +11,12 @@ app = FastAPI(
     description="Dịch vụ định danh lõi và xử lý sinh trắc học cấp độ Doanh nghiệp"
 )
 
+# Đăng ký các tuyến đường API eKYC Đông cơ AI
+app.include_router(ekyc.router)
+
 @app.get("/health", tags=["Health Check"])
 async def health_check(db: AsyncSession = Depends(get_db)):
-    """
-    Endpoint kiểm tra trạng thái hoạt động của Service và kết nối Database trực tiếp
-    """
     try:
-        # Kiểm tra nhanh kết nối bằng một câu lệnh thuần độc lập
         await db.execute(text("SELECT 1"))
         return {
             "status": "healthy",
