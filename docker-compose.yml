@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # 1. Database Lõi - Lưu trữ thông tin giao dịch tài chính
+  postgres:
+    image: postgres:15-alpine
+    container_name: omnifin-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: omnifin_user
+      POSTGRES_PASSWORD: omnifin_secure_password
+      POSTGRES_DB: omnifin_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - omnifin-network
+
+  # 2. Caching Layer - Quản lý phiên làm việc và mã OTP eKYC
+  redis:
+    image: redis:7-alpine
+    container_name: omnifin-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - omnifin-network
+
+  # 3. Event Broker Zookeeper - Quản lý cụm phối hợp cho Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: omnifin-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - omnifin-network
+
+  # 4. Message Broker Kafka - Điều phối luồng giao dịch thời gian thực
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: omnifin-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - omnifin-network
+
+  # 5. Vector Database - Lưu trữ cơ sở tri thức cho Trợ lý ảo AI RAG
+  qdrant:
+    image: qdrant/qdrant:v1.3.0
+    container_name: omnifin-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - omnifin-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+
+networks:
+  omnifin-network:
+    driver: bridge
