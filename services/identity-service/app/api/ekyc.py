@@ -3,15 +3,12 @@ import cv2
 import numpy as np
 import uuid
 import shutil
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
-import easyocr
-from ultralytics import YOLO
 from deepface import DeepFace
 
+logger = logging.getLogger("IdentityAPI")
 router = APIRouter(prefix="/v1/ekyc", tags=["eKYC Engine"])
-
-# Khởi tạo EasyOCR cho tiếng Anh và tiếng Việt (Chạy local hoàn toàn)
-reader = easyocr.Reader(['vi', 'en'], gpu=False)
 
 # Khởi tạo mô hình YOLOv8 nano
 try:
@@ -36,7 +33,17 @@ async def extract_cccd_info(file: UploadFile = File(...)):
 
         h, w, _ = img.shape
         cropped_card = img[0:h, 0:w]
-        ocr_results = reader.readtext(cropped_card, detail=0)
+
+        # TỐI ƯU HÓA: Kết nối vào pool chứa mô hình đã nạp sẵn ở RAM (Warm-up) từ main.py
+        from app.main import models_pool
+        
+        if models_pool["ocr"] is not None:
+            ocr_results = models_pool["ocr"].readtext(cropped_card, detail=0)
+        else:
+            # Cơ chế dự phòng (Fallback) nếu mô hình chưa nạp xong vào bộ nhớ khi khởi động
+            import easyocr
+            fallback_reader = easyocr.Reader(['vi', 'en'], gpu=False)
+            ocr_results = fallback_reader.readtext(cropped_card, detail=0)
 
         return {
             "status": "success",
@@ -48,7 +55,7 @@ async def extract_cccd_info(file: UploadFile = File(...)):
             "system_metadata": {
                 "image_width": w,
                 "image_height": h,
-                "engine": "YOLOv8-Nano + EasyOCR"
+                "engine": "YOLOv8-Nano + EasyOCR (Optimized Memory)"
             }
         }
     except Exception as e:
