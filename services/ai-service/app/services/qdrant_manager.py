@@ -13,7 +13,8 @@ class QdrantManager:
         if not self.client:
             self.client = AsyncQdrantClient(
                 host=settings.QDRANT_HOST,
-                port=settings.QDRANT_PORT
+                port=settings.QDRANT_PORT,
+                check_compatibility=False
             )
             logger.info(f"Kênh kết nối AsyncQdrantClient được thiết lập: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
 

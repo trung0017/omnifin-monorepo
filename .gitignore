@@ -1,1 +1,17 @@
+# Bỏ qua môi trường ảo
 .venv/
+venv/
+
+# Bỏ qua các file Cache của Python
+__pycache__/
+*.pyc
+
+# Bỏ qua thư mục chứa Data và Model AI (RẤT QUAN TRỌNG)
+data/
+models/
+*.pt
+*.pth
+*.onnx
+
+# Bỏ qua các file môi trường chứa mật khẩu
+.env
