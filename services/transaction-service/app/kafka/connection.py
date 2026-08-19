@@ -23,8 +23,8 @@ class KafkaManager:
             await self.producer.start()
             logger.info(f"Kafka Producer khởi chạy thành công kết nối tới {KAFKA_BOOTSTRAP_SERVERS}")
         except Exception as e:
-            logger.error(f"Lỗi khởi chạy Kafka Producer: {str(e)}")
-            raise e
+            logger.error(f"Lỗi khởi chạy Kafka Producer (Kafka chưa sẵn sàng): {str(e)}")
+            self.producer = None
 
     async def stop_producer(self):
         if self.producer:

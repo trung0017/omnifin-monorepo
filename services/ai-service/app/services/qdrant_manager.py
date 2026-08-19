@@ -9,14 +9,24 @@ class QdrantManager:
         self.client: AsyncQdrantClient = None
 
     def init_client(self):
-        """Khởi tạo Client bất đồng bộ kết nối tới Qdrant Vector DB"""
+        """Khởi tạo Client bất đồng bộ kết nối tới Qdrant Vector DB (Hỗ trợ Local & Cloud)"""
         if not self.client:
-            self.client = AsyncQdrantClient(
-                host=settings.QDRANT_HOST,
-                port=settings.QDRANT_PORT,
-                check_compatibility=False
-            )
-            logger.info(f"Kênh kết nối AsyncQdrantClient được thiết lập: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+            target_url = settings.QDRANT_URL or (settings.QDRANT_HOST if settings.QDRANT_HOST.startswith("http") else None)
+            if target_url:
+                self.client = AsyncQdrantClient(
+                    url=target_url,
+                    api_key=settings.QDRANT_API_KEY,
+                    check_compatibility=False
+                )
+                logger.info(f"Kênh kết nối AsyncQdrantClient Cloud được thiết lập: {target_url}")
+            else:
+                self.client = AsyncQdrantClient(
+                    host=settings.QDRANT_HOST,
+                    port=settings.QDRANT_PORT,
+                    api_key=settings.QDRANT_API_KEY,
+                    check_compatibility=False
+                )
+                logger.info(f"Kênh kết nối AsyncQdrantClient Local được thiết lập: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
 
     async def close_client(self):
         """Đóng an toàn luồng kết nối khi tắt dịch vụ"""

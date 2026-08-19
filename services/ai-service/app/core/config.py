@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     # Nếu chạy local ngoài Docker trên Mac, hãy đổi thành "localhost" thông qua tệp .env
     QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
+    QDRANT_API_KEY: str | None = None
+    QDRANT_URL: str | None = None
     
     model_config = SettingsConfigDict(
         env_file=".env", 
