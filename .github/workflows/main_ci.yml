@@ -1,0 +1,72 @@
+name: Phishing & Fraud Detection MLOps Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # Giai đoạn 1: Kiểm tra mã nguồn và cài đặt dependencies cách ly
+  setup-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Sử dụng 3.11 để đảm bảo độ ổn định cao nhất cho các thư viện AI tầng sâu trên GitHub Runner
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+          if [ -f services/ai-service/requirements.txt ]; then pip install -r services/ai-service/requirements.txt; fi
+
+      - name: Lint with flake8
+        run: |
+          # Dừng tiến trình build nếu phát hiện lỗi cú pháp nghiêm trọng hoặc biến không định nghĩa
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Cảnh báo lỗi cấu trúc phức tạp
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  # Giai đoạn 2: Tự động chạy huấn luyện và đồng bộ kết quả về MLflow Registry
+  train-and-log-model:
+    needs: setup-and-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install MLOps Stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install mlflow pydantic-settings qdrant-client langchain numpy
+
+      - name: Execute Model Training & MLflow Logging
+        env:
+          # Cấu hình địa chỉ MLflow Tracking Server nội bộ hoặc Cloud thông qua Secret
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || '[link removed]' }}
+        run: |
+          echo "Kích hoạt tiến trình Train Model và đồng bộ tham số hiệu năng (RMSE, Accuracy)..."
+          # Thực thi script huấn luyện ngầm định (Sử dụng MLflow API để lưu vết Artifacts)
+          # python scripts/train_model.py (Sẽ được viết chi tiết ở bước sau)
+
+      # Tự động hóa CD: Upload cấu phần Model làm Artifact phục vụ đóng gói Docker
+      - name: Upload Model Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnifin-ai-model
+          path: services/ai-service/app/models/
+          retention-days: 1
