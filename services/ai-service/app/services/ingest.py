@@ -48,7 +48,7 @@ async def mock_embedding_engine(texts: list[str]) -> list[list[float]]:
 async def ingest_document_pipeline(file_path: str, raw_text: str):
     """Quy trình băm nhỏ, nhúng vector và đẩy tri thức vào kho dữ liệu"""
     # 1. Khởi tạo kết nối Client cục bộ
-    client = AsyncQdrantClient(host="127.0.0.1", port=6333)
+    client = AsyncQdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
     
     try:
         # 2. Đảm bảo bảng lưu trữ đã sẵn sàng

@@ -2,17 +2,17 @@ from contextlib import asynccontextmanager
 import time
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
-from app.services.qdrant_manager import qdrant_manager
 
 from app.core.config import settings
 from app.services.qdrant_manager import qdrant_manager
+from app.api.chat import router as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # [Warm-up Phase] Thiết lập kết nối cơ sở dữ liệu Vector ngay khi bật máy chủ
+    # [Warm-up Phase] Khởi tạo kết nối cơ sở dữ liệu Vector ngay khi bật máy chủ
     qdrant_manager.init_client()
     yield
-    # [Shutdown Phase] Giải phóng tài nguyên hệ thống an toàn
+    # [Shutdown Phase] Giải phóng tài nguyên hệ thống an toàn khi tắt máy chủ
     await qdrant_manager.close_client()
 
 app = FastAPI(
@@ -20,6 +20,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Đăng ký tuyến API Chatbot & WebSocket vào kiến trúc lõi hệ thống
+# Do settings.API_V1_STR đã chứa "/v1", các tuyến đường dẫn trong chat_router sẽ kế thừa trực tiếp prefix này
+app.include_router(chat_router, prefix=settings.API_V1_STR)
 
 @app.get("/health", tags=["Infrastructure"])
 async def health_check():
@@ -35,7 +39,7 @@ async def health_check():
         content={
             "status": "healthy" if is_qdrant_healthy else "unhealthy",
             "service": settings.PROJECT_NAME,
-            "timestamp": "Aug 19, 2026, 8:04 AM",
+            "timestamp": "Aug 19, 2026, 8:33 AM",
             "dependencies": {
                 "qdrant_vector_db": "connected" if is_qdrant_healthy else "disconnected"
             },
@@ -49,8 +53,11 @@ async def health_check():
 async def get_knowledge_status():
     """Kiểm tra số lượng phân đoạn tri thức đã được nạp vào hệ thống"""
     if not qdrant_manager.client:
-        return JSONResponse(status_code=500, content={"status": "error", "message": "Qdrant Client chưa được khởi tạo."})
-        
+        return JSONResponse(
+            status_code=500, 
+            content={"status": "error", "message": "Qdrant Client chưa được khởi tạo."}
+        )
+
     try:
         collection_info = await qdrant_manager.client.get_collection(collection_name="omnifin_knowledge_base")
         return {
@@ -63,5 +70,8 @@ async def get_knowledge_status():
     except Exception as e:
         return JSONResponse(
             status_code=404,
-            content={"status": "not_found", "message": f"Bộ cơ sở tri thức chưa được khởi tạo hoặc trống: {str(e)}"}
+            content={
+                "status": "not_found", 
+                "message": f"Bộ cơ sở tri thức chưa được khởi tạo hoặc trống: {str(e)}"
+            }
         )
