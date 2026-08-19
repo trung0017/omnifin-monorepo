@@ -1,7 +1,7 @@
-aiokafka==0.14.0
-async-timeout==5.0.1
-Faker==40.36.0
-packaging==26.3
-setuptools==84.0.0
-typing_extensions==4.16.0
-wheel==0.48.0
+aiokafka
+async-timeout
+Faker
+packaging
+setuptools
+typing_extensions
+wheel
