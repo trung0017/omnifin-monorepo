@@ -57,11 +57,11 @@ jobs:
       - name: Execute Model Training & MLflow Logging
         env:
           # Cấu hình địa chỉ MLflow Tracking Server nội bộ hoặc Cloud thông qua Secret
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || '[link removed]' }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://127.0.0.1:5000' }}
         run: |
-          echo "Kích hoạt tiến trình Train Model và đồng bộ tham số hiệu năng (RMSE, Accuracy)..."
-          # Thực thi script huấn luyện ngầm định (Sử dụng MLflow API để lưu vết Artifacts)
-          # python scripts/train_model.py (Sẽ được viết chi tiết ở bước sau)
+          echo "Kích hoạt tiến trình Train Model và đồng bộ tham số hiệu năng (Accuracy, F1-Score)..."
+          # Thực thi script huấn luyện tự động (Sử dụng MLflow API để lưu vết Artifacts)
+          python scripts/train_model.py
 
       # Tự động hóa CD: Upload cấu phần Model làm Artifact phục vụ đóng gói Docker
       - name: Upload Model Artifact

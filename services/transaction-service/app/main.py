@@ -20,6 +20,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+@app.get("/health", tags=["Health Check"])
+async def health_check():
+    """Endpoint kiểm tra trạng thái liên thông của Transaction Service"""
+    return {
+        "status": "healthy",
+        "service": "transaction-service"
+    }
+
 # Khai báo cấu trúc dữ liệu giao dịch đầu vào (Chốt chặn bẫy lỗi dữ liệu)
 class TransactionSchema(BaseModel):
     transaction_id: str

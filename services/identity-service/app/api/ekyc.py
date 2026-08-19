@@ -6,6 +6,7 @@ import shutil
 import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from deepface import DeepFace
+from ultralytics import YOLO
 
 logger = logging.getLogger("IdentityAPI")
 router = APIRouter(prefix="/v1/ekyc", tags=["eKYC Engine"])
