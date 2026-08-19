@@ -27,9 +27,9 @@ jobs:
 
       - name: Run Flake8 Code Inspection
         run: |
-          # Loại trừ môi trường ảo (.venv) và thư viện thứ 3 để tránh RecursionError
-          flake8 . --exclude=.venv,services/*/.venv,scripts/.venv,node_modules,.git,__pycache__ --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --exclude=.venv,services/*/.venv,scripts/.venv,node_modules,.git,__pycache__ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          # Loại trừ toàn bộ các môi trường ảo (*.venv*) và thư viện thứ 3 để tránh RecursionError
+          flake8 . --exclude="*.venv*,node_modules,.git,__pycache__" --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --exclude="*.venv*,node_modules,.git,__pycache__" --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   # Giai đoạn 2: Kiểm tra Cấu trúc & Liên thông Microservices
   microservices-health-audit:
@@ -97,3 +97,48 @@ jobs:
           name: omnifin-ai-model
           path: services/ai-service/app/models/
           retention-days: 1
+
+  # Giai đoạn 5: Tự động Build & Deploy Web Admin Dashboard lên GitHub Pages
+  deploy-web-admin-gh-pages:
+    name: "Stage 5: Build & Deploy Web Admin to GitHub Pages"
+    needs: code-quality-and-lint
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies & Build Web Admin
+        env:
+          GITHUB_PAGES: 'true'
+        run: |
+          cd apps/web-admin
+          npm install
+          npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'apps/web-admin/dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
