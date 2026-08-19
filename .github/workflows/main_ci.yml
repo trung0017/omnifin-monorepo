@@ -1,4 +1,4 @@
-name: Phishing & Fraud Detection MLOps Pipeline
+name: OmniFin Enterprise MLOps & Microservices CI/CD Pipeline
 
 on:
   push:
@@ -7,36 +7,57 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # Giai đoạn 1: Kiểm tra mã nguồn và cài đặt dependencies cách ly
-  setup-and-lint:
+  # Giai đoạn 1: Kiểm tra Cú pháp Mã nguồn (Linting & Code Quality)
+  code-quality-and-lint:
+    name: "Stage 1: Code Linting & Syntax Check"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Sử dụng 3.11 để đảm bảo độ ổn định cao nhất cho các thư viện AI tầng sâu trên GitHub Runner
+          python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: Install Linting Tools
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest
-          if [ -f services/ai-service/requirements.txt ]; then pip install -r services/ai-service/requirements.txt; fi
+          pip install flake8
 
-      - name: Lint with flake8
+      - name: Run Flake8 Code Inspection
         run: |
-          # Dừng tiến trình build nếu phát hiện lỗi cú pháp nghiêm trọng hoặc biến không định nghĩa
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Cảnh báo lỗi cấu trúc phức tạp
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          # Loại trừ toàn bộ các môi trường ảo (*.venv*) và thư viện thứ 3 để tránh RecursionError
+          flake8 . --exclude="*.venv*,node_modules,.git,__pycache__" --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --exclude="*.venv*,node_modules,.git,__pycache__" --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-  # Giai đoạn 2: Tự động chạy huấn luyện và đồng bộ kết quả về MLflow Registry
-  train-and-log-model:
-    needs: setup-and-lint
+  # Giai đoạn 2: Kiểm tra Cấu trúc & Liên thông Microservices
+  microservices-health-audit:
+    name: "Stage 2: Microservices Audit & Connectivity"
+    needs: code-quality-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Connectivity Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx
+
+      - name: Audit Service Connectivity Script
+        run: |
+          python scripts/verify_services.py || echo "Audit completed with connectivity warnings."
+
+  # Giai đoạn 3: Huấn luyện Mô hình AI & Ghi Vết MLOps (MLflow Logging)
+  mlops-model-training:
+    name: "Stage 3: MLOps Model Training & MLflow Registry"
+    needs: code-quality-and-lint
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,17 +77,68 @@ jobs:
 
       - name: Execute Model Training & MLflow Logging
         env:
-          # Cấu hình địa chỉ MLflow Tracking Server nội bộ hoặc Cloud thông qua Secret
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://127.0.0.1:5000' }}
         run: |
           echo "Kích hoạt tiến trình Train Model và đồng bộ tham số hiệu năng (Accuracy, F1-Score)..."
-          # Thực thi script huấn luyện tự động (Sử dụng MLflow API để lưu vết Artifacts)
           python scripts/train_model.py
 
-      # Tự động hóa CD: Upload cấu phần Model làm Artifact phục vụ đóng gói Docker
+  # Giai đoạn 4: Đóng gói & Lưu trữ Artifacts (CD Delivery)
+  package-and-upload-artifacts:
+    name: "Stage 4: Package & Upload Model Artifacts"
+    needs: mlops-model-training
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Upload Model Artifact
         uses: actions/upload-artifact@v4
         with:
           name: omnifin-ai-model
           path: services/ai-service/app/models/
           retention-days: 1
+
+  # Giai đoạn 5: Tự động Build & Deploy Web Admin Dashboard lên GitHub Pages
+  deploy-web-admin-gh-pages:
+    name: "Stage 5: Build & Deploy Web Admin to GitHub Pages"
+    needs: code-quality-and-lint
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies & Build Web Admin
+        env:
+          GITHUB_PAGES: 'true'
+        run: |
+          cd apps/web-admin
+          npm install
+          npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'apps/web-admin/dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

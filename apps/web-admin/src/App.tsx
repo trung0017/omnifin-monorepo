@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { ShieldAlert, Activity, CreditCard, RefreshCw } from 'lucide-react';
 
@@ -81,7 +81,7 @@ export default function App() {
             <CreditCard color="#0a84ff" size={20} />
             <span style={styles.cardTitle}>Cảnh báo hệ thống</span>
           </div>
-          <p style={styles.cardValue} style={{ color: '#ff453a' }}>{alerts.length} Sự cố</p>
+          <p style={{ ...styles.cardValue, color: '#ff453a' }}>{alerts.length} Sự cố</p>
           <span style={styles.cardSubtitle}>Phân tích thời gian thực qua Spark</span>
         </div>
       </section>
